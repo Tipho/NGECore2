@@ -49,6 +49,7 @@ import services.ai.AIActor;
  * @author Charon 
  */
 
+@SuppressWarnings("unused") 
 public class ResourceService implements INetworkDispatch {
 	
 	private NGECore core;
@@ -116,9 +117,9 @@ public class ResourceService implements INetworkDispatch {
 //		} else {
 			ODBCursor cursor = core.getResourceRootsODB().getCursor();
 			if(!cursor.hasNext()) {
-				createCollections();
-				createCollections2();
-				createCollections3();
+				//createCollections();
+				//createCollections2();
+				//createCollections3();
 			}
 //		}
 		core.commandService.registerCommand("harvestcorpse");
@@ -221,6 +222,7 @@ public class ResourceService implements INetworkDispatch {
 		return object;
 	}
 	
+	/*
 	public void createCollections(){
 
 		// For testing purposes the Hashtable is being put together here
@@ -4773,9 +4775,9 @@ public class ResourceService implements INetworkDispatch {
 		resourceRootTable.put(294, resourceRoot);
 		nabooPool4Roots.addElement(resourceRoot);
 
-	}
+	}*/
 	//checked until here
-	public void createCollections2(){
+	/*public void createCollections2(){
 		
 		ResourceRoot resourceRoot = new ResourceRoot();
 		resourceRoot.setResourceFileName("corn_wild_rori");
@@ -9046,9 +9048,9 @@ public class ResourceService implements INetworkDispatch {
 		resourceRoot.setMaximalLifeTime(10080000L);		
 		resourceRootTable.put(578, resourceRoot);
 		yavinPool4Roots.addElement(resourceRoot);
-	}
+	}*/
 	// checked
-	public void createCollections3(){
+	/*public void createCollections3(){
 		ResourceRoot resourceRoot = new ResourceRoot();
 		resourceRoot.setResourceFileName("fiberplast_corellia");
 		resourceRoot.setResourceClass("Fiberplast");
@@ -10802,7 +10804,7 @@ public class ResourceService implements INetworkDispatch {
 		}
 		
 
-	}
+	}*/
 
 // ToDo: Go through all of this again, Vegetable tubers are double 632 berry 635 double 645 and 647 double 671,672
 // 683,84,85,86 all same
@@ -11566,40 +11568,42 @@ public class ResourceService implements INetworkDispatch {
 		actor.sendSystemMessage("@skl_use:milk_begin", (byte) 0);
 				
 		scheduler.schedule(() -> {
-			
-			if(actor.getInventoryItemCount() >= 80) {
-				actor.sendSystemMessage("@skl_use:milk_inventory_full", (byte) 0);
-				ai.setMilkState(MilkState.NOTYETMILKED);
-				return;
+			try {
+				if(actor.getInventoryItemCount() >= 80) {
+					actor.sendSystemMessage("@skl_use:milk_inventory_full", (byte) 0);
+					ai.setMilkState(MilkState.NOTYETMILKED);
+					return;
+				}
+				
+				if(target.getPosture() == 14) {
+					actor.sendSystemMessage("@skl_use:milk_cant_milk_the_dead", (byte) 0);
+					ai.setMilkState(MilkState.NOTYETMILKED);
+					return;
+				}
+				
+				if(!actor.inRange(target.getWorldPosition(), 5)) {
+					actor.sendSystemMessage("@skl_use:milk_too_far", (byte) 0);
+					ai.setMilkState(MilkState.NOTYETMILKED);
+					return;
+				}
+				
+				if(actor.isInCombat()) {
+					actor.sendSystemMessage("@skl_use:milk_combat", (byte) 0);
+					ai.setMilkState(MilkState.NOTYETMILKED);
+					return;
+				}
+				
+				if(new Random().nextFloat() <= 0.05f) {
+					actor.sendSystemMessage("@skl_use:milk_not_hidden", (byte) 0);
+					ai.setMilkState(MilkState.NOTYETMILKED);
+					ai.addDefender(actor);
+					return;
+				}
+				
+				giveMilk(actor, target);
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
-			
-			if(target.getPosture() == 14) {
-				actor.sendSystemMessage("@skl_use:milk_cant_milk_the_dead", (byte) 0);
-				ai.setMilkState(MilkState.NOTYETMILKED);
-				return;
-			}
-			
-			if(!actor.inRange(target.getWorldPosition(), 5)) {
-				actor.sendSystemMessage("@skl_use:milk_too_far", (byte) 0);
-				ai.setMilkState(MilkState.NOTYETMILKED);
-				return;
-			}
-			
-			if(actor.isInCombat()) {
-				actor.sendSystemMessage("@skl_use:milk_combat", (byte) 0);
-				ai.setMilkState(MilkState.NOTYETMILKED);
-				return;
-			}
-			
-			if(new Random().nextFloat() <= 0.05f) {
-				actor.sendSystemMessage("@skl_use:milk_not_hidden", (byte) 0);
-				ai.setMilkState(MilkState.NOTYETMILKED);
-				ai.addDefender(actor);
-				return;
-			}
-			
-			giveMilk(actor, target);
-			
 		}, 10000, TimeUnit.MILLISECONDS);
 		
 	}

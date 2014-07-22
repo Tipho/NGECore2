@@ -21,24 +21,17 @@
  ******************************************************************************/
 package resources.guild;
 
-import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import main.NGECore;
-
-import org.apache.mina.core.buffer.IoBuffer;
-
+import resources.common.ProsePackage;
 import services.chat.Mail;
-import engine.resources.objects.Delta;
 import engine.resources.objects.SWGObject;
 
-public class Guild extends Delta implements Serializable, Comparable<Guild> {
+public class Guild {
 	
-	private static final long serialVersionUID = 1L;
 	private int id;
 	private int chatRoomId;
 	private String abbreviation;
@@ -47,14 +40,17 @@ public class Guild extends Delta implements Serializable, Comparable<Guild> {
 	private String leaderName;
 	private Map<Long, GuildMember> members = new HashMap<Long, GuildMember>();
 	private Map<Long, String> sponsoredPlayers = new HashMap<Long, String>();
+	private Map<Long, Integer> leaderCandidates = new HashMap<Long, Integer>();
+	private String motd = "";
+	private boolean electionsEnabled = false;
+	private long electionResultsDate;
+	
 	public Guild(int id, String abbreviation, String name, SWGObject leader) {
 		this.id = id;
 		this.abbreviation = abbreviation;
 		this.name = name;
 		this.leader = leader.getObjectID();
 		this.leaderName = leader.getCustomName();
-		//this.members.add(leader.getObjectID());
-		//this.sponsors.add(leader.getObjectID());
 	}
 	
 	public Guild() { }
@@ -65,7 +61,7 @@ public class Guild extends Delta implements Serializable, Comparable<Guild> {
 		return member;
 	}
 	
-	public void sendGuildMail(String sender, String subject, String message) {
+	public void sendGuildMail(String sender, String subject, String message, ProsePackage prose) {
 		NGECore core = NGECore.getInstance();
 		Date date = new Date();
 		members.forEach((id, member) -> {
@@ -75,6 +71,7 @@ public class Guild extends Delta implements Serializable, Comparable<Guild> {
             guildMail.setRecieverId(id);
             guildMail.setStatus(Mail.NEW);
             guildMail.setMessage(message);
+            if (prose != null) guildMail.addProseAttachment(prose);
             guildMail.setSubject(subject);
             guildMail.setSenderName(sender);
             core.chatService.storePersistentMessage(guildMail);
@@ -85,16 +82,20 @@ public class Guild extends Delta implements Serializable, Comparable<Guild> {
 		});
 	}
 	
+	public void sendGuildMail(String sender, String subject, String message) {
+		sendGuildMail(sender, subject, message, null);
+	}
+	
+	public void sendGuildMail(String sender, String subject, ProsePackage prose) {
+		sendGuildMail(sender, subject, "", prose);
+	}
+	
 	public int getId() {
-		synchronized(objectMutex) {
-			return id;
-		}
+		return id;
 	}
 	
 	public void setId(int id) {
-		synchronized(objectMutex) {
-			this.id = id;
-		}
+		this.id = id;
 	}
 	
 	public int getChatRoomId() {
@@ -106,27 +107,19 @@ public class Guild extends Delta implements Serializable, Comparable<Guild> {
 	}
 
 	public String getAbbreviation() {
-		synchronized(objectMutex) {
-			return abbreviation;
-		}
+		return abbreviation;
 	}
 	
 	public void setAbbreviation(String abbreviation) {
-		synchronized(objectMutex) {
-			this.abbreviation = abbreviation;
-		}
+		this.abbreviation = abbreviation;
 	}
 	
 	public String getName() {
-		synchronized(objectMutex) {
-			return name;
-		}
+		return name;
 	}
 	
 	public void setName(String name) {
-		synchronized(objectMutex) {
-			this.name = name;
-		}
+		this.name = name;
 	}
 	
 	public String getString() {
@@ -134,31 +127,31 @@ public class Guild extends Delta implements Serializable, Comparable<Guild> {
 	}
 	
 	public long getLeader() {
-		synchronized(objectMutex) {
-			return leader;
-		}
+		return leader;
 	}
 	
 	public void setLeader(long leader) {
-		synchronized(objectMutex) {
-			this.leader = leader;
-		}
+		this.leader = leader;
 	}
 	
+	public String getMotd() {
+		return motd;
+	}
+
+	public void setMotd(String motd) {
+		this.motd = motd;
+	}
+
 	public Map<Long, GuildMember> getMembers() {
 		return members;
 	}
 
 	public String getLeaderName() {
-		synchronized(objectMutex) {
-			return leaderName;
-		}
+		return leaderName;
 	}
 
 	public void setLeaderName(String leaderName) {
-		synchronized(objectMutex) {
-			this.leaderName = leaderName;
-		}
+		this.leaderName = leaderName;
 	}
 
 	public Map<Long, String> getSponsoredPlayers() {
@@ -172,18 +165,33 @@ public class Guild extends Delta implements Serializable, Comparable<Guild> {
 	public GuildMember getMember(long objectID) {
 		return members.get(objectID);
 	}
+
+	public boolean isElectionsEnabled() {
+		return electionsEnabled;
+	}
+
+	public void setElectionsEnabled(boolean electionsEnabled) {
+		this.electionsEnabled = electionsEnabled;
+	}
+
+	public long getElectionResultsDate() {
+		return electionResultsDate;
+	}
+
+	public void setElectionResultsDate(long electionResultsDate) {
+		this.electionResultsDate = electionResultsDate;
+	}
+
+	public Map<Long, Integer> getLeaderCandidates() {
+		return leaderCandidates;
+	}
+
+	public void setLeaderCandidates(Map<Long, Integer> leaderCandidates) {
+		this.leaderCandidates = leaderCandidates;
+	}
 	
-	public byte[] getBytes() {
-		synchronized(objectMutex) {
-			IoBuffer buffer = createBuffer((getString().length() + 2));
-			buffer.put(getAsciiString(getString()));
-			return buffer.array();
-		}
+	public boolean isRunningForLeader(long objectID) {
+		if (leaderCandidates.containsKey(Long.valueOf(objectID))) return true;
+		else return false;
 	}
-
-	@Override
-	public int compareTo(Guild guild) {
-		return ((Integer) id).compareTo(guild.getId());
-	}
-
 }

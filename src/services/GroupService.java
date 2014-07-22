@@ -27,7 +27,6 @@ import java.util.Map;
 
 import resources.buffs.Buff;
 import resources.common.OutOfBand;
-import resources.common.ProsePackage;
 import resources.objects.creature.CreatureObject;
 import resources.objects.group.GroupObject;
 import services.chat.ChatRoom;
@@ -46,6 +45,7 @@ public class GroupService implements INetworkDispatch {
 		core.commandService.registerCommand("invite");
 		core.commandService.registerCommand("join");
 		core.commandService.registerCommand("disband");
+		core.commandService.registerAlias("leavegroup", "disband");
 		core.commandService.registerCommand("decline");
 		core.commandService.registerCommand("dismissgroupmember");
 	}
@@ -173,6 +173,11 @@ public class GroupService implements INetworkDispatch {
 		
 		if(group != null && group.getMemberList().size() < 8) {
 			
+			invited.setInviteCounter(invited.getInviteCounter() + 1);
+			invited.setInviteSenderId(0);
+			invited.setInviteSenderName("");
+			invited.updateGroupInviteInfo();
+			
 			group.addMember(invited);
 			invited.makeAware(group);
 			invited.setGroupId(group.getObjectID());	
@@ -245,7 +250,7 @@ public class GroupService implements INetworkDispatch {
 			creature.updateGroupInviteInfo();
 			creature.setGroupId(0);
 			creature.makeUnaware(group);
-			core.chatService.leaveChatRoom(creature, group.getChatRoomId());
+			core.chatService.leaveChatRoom(creature, group.getChatRoomId(), true);
 			creature.sendSystemMessage("@group:removed", (byte) 0);
 
 			for(SWGObject member : memberList) {
@@ -272,7 +277,7 @@ public class GroupService implements INetworkDispatch {
 
 				creature2.makeUnaware(group);
 				
-				core.chatService.leaveChatRoom(creature2, group.getChatRoomId());
+				core.chatService.leaveChatRoom(creature2, group.getChatRoomId(), true);
 				creature.sendSystemMessage("@group:disbanded", (byte) 0);
 				
 				removeGroupBuffs((CreatureObject) member);
@@ -300,7 +305,7 @@ public class GroupService implements INetworkDispatch {
 		creature.updateGroupInviteInfo();
 		creature.setGroupId(0);
 		creature.makeUnaware(group);
-		core.chatService.leaveChatRoom(creature, group.getChatRoomId());
+		core.chatService.leaveChatRoom(creature, group.getChatRoomId(), true);
 		creature.sendSystemMessage("@group:removed", (byte) 0);
 
 		for(SWGObject member : group.getMemberList()) {

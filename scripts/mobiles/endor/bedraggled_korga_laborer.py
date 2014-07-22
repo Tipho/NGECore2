@@ -1,24 +1,26 @@
 import sys
 from services.spawn import MobileTemplate
 from services.spawn import WeaponTemplate
+from resources.datatables import WeaponType
+from resources.datatables import Difficulty
+from resources.datatables import Options
 from java.util import Vector
+
 
 def addTemplate(core):
 	mobileTemplate = MobileTemplate()
 	
 	mobileTemplate.setCreatureName('bedraggled_korga_laborer')
 	mobileTemplate.setLevel(74)
-	mobileTemplate.setDifficulty(0)
-	mobileTemplate.setAttackRange(5)
-	mobileTemplate.setAttackSpeed(1.0)
-	mobileTemplate.setWeaponType(6)
+	mobileTemplate.setDifficulty(Difficulty.NORMAL)
+
 	mobileTemplate.setMinSpawnDistance(3)
 	mobileTemplate.setMaxSpawnDistance(5)
 	mobileTemplate.setDeathblow(True)
 	mobileTemplate.setSocialGroup('korga tribe')
 	mobileTemplate.setAssistRange(1)
 	mobileTemplate.setStalker(False)
-	mobileTemplate.setOptionsBitmask(128)
+	mobileTemplate.setOptionsBitmask(Options.ATTACKABLE)
 	
 	
 	templates = Vector()
@@ -27,7 +29,7 @@ def addTemplate(core):
 	mobileTemplate.setTemplates(templates)
 	
 	weaponTemplates = Vector()
-	weapontemplate = WeaponTemplate('object/weapon/melee/unarmed/shared_unarmed_default.iff', 6, 1.0)
+	weapontemplate = WeaponTemplate('object/weapon/melee/unarmed/shared_unarmed_default.iff', WeaponType.UNARMED, 1.0, 6, 'kinetic')
 	weaponTemplates.add(weapontemplate)
 	mobileTemplate.setWeaponTemplateVector(weaponTemplates)
 	

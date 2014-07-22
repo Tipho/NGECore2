@@ -21,7 +21,10 @@
  ******************************************************************************/
 package main;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.io.IOException;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -49,6 +52,7 @@ import net.engio.mbassy.bus.config.BusConfiguration;
 import resources.common.BountyListItem;
 import resources.common.RadialOptions;
 import resources.common.ThreadMonitor;
+import resources.datatables.GalaxyStatus;
 import resources.objects.creature.CreatureObject;
 import resources.objects.guild.GuildObject;
 import resources.objects.resource.GalacticResource;
@@ -62,6 +66,7 @@ import services.DevService;
 import services.EntertainmentService;
 import services.GroupService;
 import services.housing.HousingService;
+import services.BrowserService;
 import services.InstanceService;
 import services.LoginService;
 import services.LootService;
@@ -96,14 +101,20 @@ import services.object.ObjectId;
 import services.object.ObjectService;
 import services.object.UpdateService;
 import services.pet.MountService;
+import services.pet.PetService;
+import services.playercities.PlayerCity;
 import services.playercities.PlayerCityService;
 import services.resources.HarvesterService;
 import services.resources.ResourceService;
 import services.retro.RetroService;
+import services.reverseengineering.ReverseEngineeringService;
 import services.spawn.SpawnService;
 import services.sui.SUIService;
 import services.trade.TradeService;
 import services.travel.TravelService;
+import tools.CharonPacketLogger;
+import tools.DevLogQueuer;
+//import services.BattlefieldService;
 import engine.clientdata.ClientFileManager;
 import engine.clientdata.visitors.CrcStringTableVisitor;
 import engine.clientdata.visitors.DatatableVisitor;
@@ -140,7 +151,7 @@ public class NGECore {
 	private static NGECore instance;
 	
 	private Config config = null;
-
+	private String motd = "";
 	private volatile boolean isShuttingDown = false;
 	private long galacticTime = System.currentTimeMillis();
 	
@@ -196,7 +207,10 @@ public class NGECore {
 	public HarvesterService harvesterService;
 	public MountService mountService;
 	public PlayerCityService playerCityService;
-
+	public ReverseEngineeringService reverseEngineeringService;
+	public PetService petService;
+	public BrowserService browserService;
+	//public BattlefieldService battlefieldService;
 	
 	// Login Server
 	public NetworkDispatch loginDispatch;
@@ -224,6 +238,7 @@ public class NGECore {
 	private ObjectDatabase resourceHistoryODB;
 	private ObjectDatabase swgObjectODB;
 	private ObjectDatabase bountiesODB;
+	private ObjectDatabase cityODB;
 	
 	public static boolean PACKET_DEBUG = false;
 	
@@ -257,7 +272,7 @@ public class NGECore {
 		options.setFilePath("options.cfg");
 		boolean optionsConfigLoaded = options.loadConfigFile();
 		
-		if (optionsConfigLoaded && options.getInt("CLEAN.ODB.FOLDERS") > 0) {
+		if (optionsConfigLoaded && options.getInt("CLEAN.ODB.FOLDERS") > 0 || getExcludedDevelopers().contains(System.getProperty("user.name"))){
 			File baseFolder = new File("./odb");
 			
 			if (baseFolder.isDirectory()) {
@@ -272,6 +287,12 @@ public class NGECore {
 			System.out.println("Cleaned ODB Folders.");
 		}
 		
+		try(BufferedReader br = new BufferedReader(new FileReader("./motd.txt"))) {
+			for(String line; (line = br.readLine()) != null;) {
+				motd += line;
+			}
+		} catch (IOException e1) { e1.printStackTrace(); }
+
 		// Database
 		databaseConnection = new DatabaseConnection();
 		databaseConnection.connect(config.getString("DB.URL"), config.getString("DB.NAME"), config.getString("DB.USER"), config.getString("DB.PASS"), "postgresql");
@@ -284,7 +305,7 @@ public class NGECore {
 			databaseConnection2.connect(config.getString("DB2.URL"), config.getString("DB2.NAME"), config.getString("DB2.USER"), config.getString("DB2.PASS"), "mysql");
 		}
 		
-		setGalaxyStatus(1);
+		setGalaxyStatus(GalaxyStatus.Loading);
 		swgObjectODB = new ObjectDatabase("swgobjects", true, true, true, SWGObject.class);
 		mailODB = new ObjectDatabase("mails", true, true, true, Mail.class);
 		guildODB = new ObjectDatabase("guild", true, true, true, GuildObject.class);
@@ -296,6 +317,7 @@ public class NGECore {
 		resourceHistoryODB = new ObjectDatabase("resourcehistory", true, true, true, GalacticResource.class);
 		auctionODB = new ObjectDatabase("auction", true, true, true, AuctionItem.class);
 		bountiesODB = new ObjectDatabase("bounties", true, true, true, BountyListItem.class);
+		cityODB = new ObjectDatabase("cities", true, true, true, PlayerCity.class);
 		
 		// Services
 		loginService = new LoginService(this);
@@ -322,7 +344,6 @@ public class NGECore {
 		skillModService = new SkillModService(this);
 		equipmentService = new EquipmentService(this);
 		entertainmentService = new EntertainmentService(this);
-		devService = new DevService(this);
 		conversationService = new ConversationService(this);
 		bazaarService = new BazaarService(this);
 		housingService = new HousingService(this);
@@ -331,6 +352,8 @@ public class NGECore {
 		mountService = new MountService(this);
 		playerCityService = new PlayerCityService(this);
 		staticService = new StaticService(this);
+		reverseEngineeringService = new ReverseEngineeringService(this);
+		petService = new PetService(this);
 		
 		if (config.keyExists("JYTHONCONSOLE.PORT")) {
 			int jythonPort = config.getInt("JYTHONCONSOLE.PORT");
@@ -353,19 +376,34 @@ public class NGECore {
 		}
 		
 		// Ping Server
-		try {
-			PingServer pingServer = new PingServer(config.getInt("PING.PORT"));
-			pingServer.bind();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+
+		
+		if(config.keyExists("PING.PORT"))
+			if (config.getInt("PING.PORT") != 0) {
+				try {
+					PingServer pingServer = new PingServer(config.getInt("PING.PORT"));
+					pingServer.bind();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			} else
+			System.out.println("Warning: pingServer was not launched. Port equals 0.");
+		else
+			System.out.println("Warning: pingServer was not launched. Port not specified.");
+		
 		
 		// Login Server
 		loginDispatch = new NetworkDispatch(this, false);
 		loginDispatch.addService(loginService);
-		
-		loginServer = new MINAServer(loginDispatch, config.getInt("LOGIN.PORT"));
-		loginServer.start();
+				
+		if(config.keyExists("LOGIN.PORT"))
+			if (config.getInt("LOGIN.PORT") != 0) {
+				loginServer = new MINAServer(loginDispatch, config.getInt("LOGIN.PORT"));
+				loginServer.start();
+			} else
+			System.out.println("Warning: loginServer was not launched. Port equals 0.");
+		else
+			System.out.println("Warning: loginServer was not launched. Port not specified.");
 		
 		// Zone Server
 		zoneDispatch = new NetworkDispatch(this, true);
@@ -389,14 +427,22 @@ public class NGECore {
 		zoneDispatch.addService(housingService);
 		zoneDispatch.addService(playerCityService);
 		zoneDispatch.addService(staticService);
+		zoneDispatch.addService(reverseEngineeringService);
+		zoneDispatch.addService(petService);
 		
 		if (optionsConfigLoaded && options.getInt("LOAD.RESOURCE.SYSTEM") == 1) {
 			zoneDispatch.addService(surveyService);
 			zoneDispatch.addService(resourceService);
 		}
-		
-		zoneServer = new MINAServer(zoneDispatch, config.getInt("ZONE.PORT"));
-		zoneServer.start();
+			
+		if(config.keyExists("ZONE.PORT"))
+			if (config.getInt("ZONE.PORT") != 0) {
+				zoneServer = new MINAServer(zoneDispatch, config.getInt("ZONE.PORT"));
+				zoneServer.start();
+			} else
+			System.out.println("Warning: zoneServer was not launched. Port equals 0.");
+		else
+			System.out.println("Warning: zoneServer was not launched. Port not specified.");
 		
 		//Start terrainList
 		// Original Planets
@@ -508,13 +554,24 @@ public class NGECore {
 		staticService.spawnStatics();
 		
 		equipmentService.loadBonusSets();
-		
+		playerCityService.loadCityRankCaps();
+		playerCityService.loadCities();
 		retroService.run();
 		
+		browserService = new BrowserService(this);
+		//battlefieldService = new BattlefieldService(this);
+		devService = new DevService(this);
+		
+		DevLogQueuer devLogQueuer = new DevLogQueuer();
+		
+		CharonPacketLogger packetLogger;
+		if (PACKET_DEBUG)
+			packetLogger = new CharonPacketLogger();
+
 		didServerCrash = false;
 		System.out.println("Started Server.");
 		cleanupCreatureODB();
-		setGalaxyStatus(2);
+		setGalaxyStatus(GalaxyStatus.Online);
 		
 	}
 
@@ -664,7 +721,11 @@ public class NGECore {
 	public ObjectDatabase getAuctionODB() {
 		return auctionODB;
 	}
-	
+
+	public ObjectDatabase getCityODB() {
+		return cityODB;
+	}
+
 	public int getActiveClients() {
 		int connections = 0;
 		for (Map.Entry<IoSession, Client> c : clients.entrySet()) {
@@ -731,7 +792,7 @@ public class NGECore {
 					chatService.broadcastGalaxy("The server will be shutting down soon. Please find a safe place to logout. (" + minutes + " minutes left)");
 					Thread.sleep(60000);
 			}
-			setGalaxyStatus(3);
+			setGalaxyStatus(GalaxyStatus.Locked);
 			chatService.broadcastGalaxy("The server will be shutting down soon. Please find a safe place to logout. (" + 1 + " minutes left)");
 			Thread.sleep(30000);
 			chatService.broadcastGalaxy("You will be disconnected in 30 seconds so the server can perform a final save before shutting down.  Please find a safe place to logout now.");
@@ -772,8 +833,23 @@ public class NGECore {
 		objectIdODB.close();
 		duplicateIdODB.close();
 		auctionODB.close();
+		cityODB.close();
 	}
 
+	public String getMotd() {
+		return motd;
+	}
+
+	public void setMotd(String motd) {
+		this.motd = motd;
+	}
 	
+	public Vector<String> getExcludedDevelopers(){
+		Vector<String> excludedDevelopers = new Vector<String>();
+		excludedDevelopers.add("Charon");
+		// Feel free to add your OS user account name here to exclude yourself from loading buildouts and snapshots
+		// without having to change options.cfg all the time
+		return excludedDevelopers;
+	}
 }
 

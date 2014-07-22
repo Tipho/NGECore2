@@ -91,11 +91,14 @@ public class BuffService implements INetworkDispatch {
 		
 		if(buff == null) return false;
 		
+		// Here the necessary checks must be placed to prevent buffs from the same buff group (e.g. Buff D) being stacked!
+		
 		if(buff.isGroupBuff()) {
 			addGroupBuff(buffer, buffName, buffer);
 			return true;
 		} else {
-			doAddBuff(target, buffName, buffer);
+			if (! hasBuff(target,buffName)) // QA, prevent infinite "refreshing" of buff by repeated use
+				doAddBuff(target, buffName, buffer);
 			return true;
 		}
 	}
@@ -168,9 +171,12 @@ public class BuffService implements INetworkDispatch {
 				@Override
 				public void run() {
 					
-					removeBuffFromCreature(target, buff);
+					try {
+						removeBuffFromCreature(target, buff);
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
 					
-				
 				}
 				
 			}, (long) buff.getDuration(), TimeUnit.SECONDS);
@@ -183,11 +189,15 @@ public class BuffService implements INetworkDispatch {
 			ScheduledFuture<?> task = scheduler.scheduleAtFixedRate(new Runnable() {
 				@Override
 				public void run() {
-					if (buffer == null  || buffer.getClient() == null)
-						removeBuffFromCreature(target, buff);
-
-					if (target.getWorldPosition().getDistance2D(buffer.getWorldPosition()) > 80) {
-						removeBuffFromCreature(target, buff);
+					try {
+						if (buffer == null  || buffer.getClient() == null)
+							removeBuffFromCreature(target, buff);
+	
+						if (target.getWorldPosition().getDistance2D(buffer.getWorldPosition()) > 80) {
+							removeBuffFromCreature(target, buff);
+						}
+					} catch (Exception e) {
+						e.printStackTrace();
 					}
 				}
 			}, 5, 5, TimeUnit.SECONDS);
@@ -270,16 +280,25 @@ public class BuffService implements INetworkDispatch {
 		// copy to array for thread safety
 
 		for(final Buff buff : creature.getBuffList().get().toArray(new Buff[] { })) {
-
-			if (buff.getGroup1().startsWith("setBonus")) { continue; }
+			
+			if (buff.getRemovalTask() != null) { continue; }
 
 			if(buff.isGroupBuff() && buff.getGroupBufferId() != creature.getObjectID()) {
 				removeBuffFromCreature(creature, buff);
 				continue;
 			}
 
+			if (buff.getDuration() == (float) -1)
+				continue;
+			
 			if(buff.getRemainingDuration() > 0 && buff.getDuration() > 0) {
-				ScheduledFuture<?> task = scheduler.schedule(() -> removeBuffFromCreature(creature, buff), (long) buff.getRemainingDuration(), TimeUnit.SECONDS);
+				ScheduledFuture<?> task = scheduler.schedule(() -> {
+					try {
+						removeBuffFromCreature(creature, buff);
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
+				}, (long) buff.getRemainingDuration(), TimeUnit.SECONDS);
 				buff.setRemovalTask(task);
 				continue;
 			} else {
@@ -288,6 +307,14 @@ public class BuffService implements INetworkDispatch {
 
 		}
 
+	}
+	
+	public boolean hasBuff(final CreatureObject creature, String buffName) {
+
+		for(final Buff buff : creature.getBuffList().get().toArray(new Buff[] { })) {
+			if (buff.getBuffName().contains(buffName)) { return true; }
+		}
+		return false;
 	}
 	
 	public void addGroupBuff(CreatureObject buffer, String buffName) {

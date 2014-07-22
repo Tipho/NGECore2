@@ -64,13 +64,18 @@ public class SurveyService implements INetworkDispatch {
 	}
 		
 
+	@SuppressWarnings("unused")
 	public void scheduleSurveyService(){
 		
 		final ScheduledFuture<?> task = scheduler.scheduleAtFixedRate(new Runnable() {
 
 			@Override
 			public void run() {
-				ServiceProcessing();	
+				try {
+					ServiceProcessing();	
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
 			}
 			
 		}, 10, 1000, TimeUnit.MILLISECONDS);
@@ -126,6 +131,7 @@ public class SurveyService implements INetworkDispatch {
 		}	
 	}
 	
+	@SuppressWarnings("unused")
 	public void handleSamplingStages(SurveyTool surveyTool){
 		
 		if (surveyTool.isExceptionalState())
@@ -268,6 +274,9 @@ public class SurveyService implements INetworkDispatch {
 //		}
 		if (target==null)
 			return; // target object not valid
+		
+		if (crafter.getContainer()!=null)
+			return;
 		
 		SurveyTool surveyTool = (SurveyTool)target;			
 		if (surveyTool.getToolType()==-1)		

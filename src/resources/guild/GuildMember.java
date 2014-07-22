@@ -28,13 +28,13 @@ import java.util.Vector;
 public class GuildMember {
 	private long objectId;
 	private long joinTime;
-	private String profession;
+	private String profession = "";
 	private short level;
-	private String rank;
-	private String name;
-	// TODO: These might have to be moved to a new GuildRank class depending on how permissions worked for NGE
-	//this works for now... Lack of NGE Guild Rank guides makes re-creation difficult (Ranks introduced Game Update 8: http://swg.wikia.com/wiki/Game_Update_8)
-	
+	private String rank = "";
+	private String name = "";
+	private String title = "";
+	private int votes = 0;
+	private long votedId;
 	private Vector<String> permissions = new Vector<String>();
 	private boolean mailPermission = false;
 	private boolean sponsorPermission = false;
@@ -92,6 +92,30 @@ public class GuildMember {
 
 	public void setJoinTime(long joinTime) {
 		this.joinTime = joinTime;
+	}
+
+	public int getVotes() {
+		return votes;
+	}
+
+	public void setVotes(int votes) {
+		this.votes = votes;
+	}
+	
+	public void incrementVotes() {
+		this.votes++;
+	}
+	
+	public void decrementVotes() {
+		this.votes--;
+	}
+	
+	public long getVotedId() {
+		return votedId;
+	}
+
+	public void setVotedId(long votedId) {
+		this.votedId = votedId;
 	}
 
 	public boolean hasMailPermission() {
@@ -242,6 +266,14 @@ public class GuildMember {
 
 	public void setRank(String rank) {
 		this.rank = rank;
+	}
+
+	public String getTitle() {
+		return title;
+	}
+
+	public void setTitle(String title) {
+		this.title = title;
 	}
 
 	public String getName() {

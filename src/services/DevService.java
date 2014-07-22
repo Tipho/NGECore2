@@ -33,8 +33,10 @@ import org.apache.mina.core.session.IoSession;
 
 import resources.common.Console;
 import resources.common.FileUtilities;
+import resources.common.Forager;
 import resources.common.Opcodes;
 import resources.common.SpawnPoint;
+import resources.datatables.Posture;
 import resources.datatables.WeaponType;
 import resources.harvest.SurveyTool;
 import resources.objects.building.BuildingObject;
@@ -50,9 +52,13 @@ import main.NGECore;
 import engine.clientdata.ClientFileManager;
 import engine.clientdata.visitors.DatatableVisitor;
 import engine.clients.Client;
+import engine.resources.container.CreatureContainerPermissions;
+import engine.resources.container.CreaturePermissions;
+import engine.resources.container.NullPermissions;
 import engine.resources.objects.SWGObject;
 import engine.resources.scene.Planet;
 import engine.resources.scene.Point3D;
+import engine.resources.scene.Quaternion;
 import engine.resources.service.INetworkDispatch;
 import engine.resources.service.INetworkRemoteEvent;
 
@@ -60,9 +66,11 @@ import engine.resources.service.INetworkRemoteEvent;
 public class DevService implements INetworkDispatch {
 	
 	private NGECore core;
-
+	private long frogBuildingId = 0;
+	
 	public DevService(NGECore core) {
 		this.core = core;
+		loadFrogBuilding();
 	}
 	
 	public void sendCharacterBuilderSUI(CreatureObject creature, int childMenu) 
@@ -75,6 +83,10 @@ public class DevService implements INetworkDispatch {
 				suiOptions.put((long) 1, "Character");
 				suiOptions.put((long) 2, "Items");
 				suiOptions.put((long) 3, "Locations");
+				if (System.getProperty("user.name").equals("Charon"))
+					suiOptions.put((long) 4, "Treasure chest test");
+				if (creature.getClient().isGM())
+					suiOptions.put((long) 200, "Get new CBT");
 				break;
 			case 1: // Character
 				suiOptions.put((long) 10, "Set combat level to 90");
@@ -92,8 +104,10 @@ public class DevService implements INetworkDispatch {
 					suiOptions.put((long) 120, "House Deeds");
 					suiOptions.put((long) 125, "Crafting Tools");
 					suiOptions.put((long) 130, "Vehicle Deeds");
-					suiOptions.put((long) 121, "Sandbox City");	
-					suiOptions.put((long) 140, "Guild Registry Device (PDA)");
+					suiOptions.put((long) 131, "Pet Deeds");
+					suiOptions.put((long) 121, "Sandbox City");
+					if(creature.getPlayerObject().getProfession().equals("trader_0a") || creature.getPlayerObject().getProfession().equals("trader_0b") || creature.getPlayerObject().getProfession().equals("trader_0c") || creature.getPlayerObject().getProfession().equals("trader_0d"))
+						suiOptions.put((long) 177, "REing");
 				}
 
 				break;
@@ -108,6 +122,7 @@ public class DevService implements INetworkDispatch {
 				suiOptions.put((long) 41, "Tusken Rucksack");
 				suiOptions.put((long) 42, "Heroism Jewlery Set");
 				suiOptions.put((long) 43, "Breath of Heaven");
+				suiOptions.put((long) 140, "Guild Registry Device (PDA)");
 				break;
 			case 5: // [Items] Armor
 				suiOptions.put((long) 50, "Assault Armor");
@@ -148,6 +163,7 @@ public class DevService implements INetworkDispatch {
 					suiOptions.put((long) 166, "Teleport to Imperial Op");
 					suiOptions.put((long) 167, "Teleport to Rebel Base ");
 					suiOptions.put((long) 168, "Teleport to NS vs SMC Battle");
+					suiOptions.put((long) 169, "Teleport to NS Stronghold");
 					suiOptions.put((long) 153, "Teleport to Force Crystal Hunter's Cave");
 					suiOptions.put((long) 121, "Teleport to Sandbox City");	
 				}
@@ -183,11 +199,33 @@ public class DevService implements INetworkDispatch {
 					case 3: // Locations
 						sendCharacterBuilderSUI(player, 11);
 						return; 
-					
+						
+					case 4: // Test
+						TangibleObject treasureContainer = (TangibleObject) NGECore.getInstance().staticService.spawnObject("object/tangible/container/drum/shared_treasure_drum.iff", 
+								owner.getPlanet().getName(), 0L, owner.getWorldPosition().x, owner.getWorldPosition().y, owner.getWorldPosition().z, 0.70F, 0.71F);						
+						treasureContainer.setAttachment("radial_filename", "object/treasureContainer");
+						
+						//treasureContainer.setContainerPermissions(CreatureContainerPermissions.CREATURE_CONTAINER_PERMISSIONS); 
+						treasureContainer.setAttachment("TreasureExtractorID", owner.getObjectID());
+						treasureContainer.add(core.objectService.createObject("object/tangible/inventory/shared_character_inventory.iff", treasureContainer.getPlanet()));
+						String template = "object/tangible/wearables/bracelet/shared_bracelet_s02_r.iff";
+						TangibleObject droppedItem = (TangibleObject) core.objectService.createObject(template, planet);
+//						SWGObject lootedObjectInventory = treasureContainer.getSlottedObject("inventory");
+//						lootedObjectInventory.add(droppedItem);
+//						
+						Forager forager = new Forager();
+						forager.configureTreasureLoot(treasureContainer,(CreatureObject)owner,(short)90);
+						NGECore.getInstance().lootService.DropLoot((CreatureObject)owner, treasureContainer);
+						
+						//treasureContainer.add(droppedItem);
+						return;
+
 					// Character
 					case 10: // Set combat level to 90
-						core.playerService.grantLevel(player, 90); // Commented out until fixed
-					    //core.playerService.giveExperience(player, 999999999);
+						if (player.getAttachment("hasLeveled") == null) {
+							player.setAttachment("hasLeveled", true);
+							core.playerService.grantLevel(player, 90);
+						}
 						return;
 					case 11: // Give 100,000 credits
 						player.setCashCredits(player.getCashCredits() + 100000);
@@ -1049,19 +1087,16 @@ public class DevService implements INetworkDispatch {
 						colorCrystal.getAttributes().put("@obj_attr_n:condition", "100/100");
 						colorCrystal.getAttributes().put("@obj_attr_n:crystal_owner", "\\#D1F56F UNTUNED \\#FFFFFF ");
 						colorCrystal.setAttachment("radial_filename", "item/tunable");
-						core.lootService.setCustomization(colorCrystal, "colorcrystal");
+						core.lootService.setCustomization(colorCrystal, "colorcrystal",null,null);
 						inventory.add(colorCrystal);
 						
 						TangibleObject lavaCrystal = (TangibleObject) core.objectService.createObject("object/tangible/component/weapon/lightsaber/shared_lightsaber_module_lava_crystal.iff", planet);
-						lavaCrystal.getAttributes().put("@obj_attr_n:condition", "100/100");
-						lavaCrystal.getAttributes().put("@obj_attr_n:crystal_owner", "\\#D1F56F UNTUNED \\#FFFFFF ");
-						lavaCrystal.getAttributes().put("@obj_attr_n:color", "Lava"); 
-						lavaCrystal.setAttachment("radial_filename", "item/tunable");		
 						inventory.add(lavaCrystal);
 						
 						return;
 						
 					case 110:
+
 						SurveyTool mineralSurveyTool = (SurveyTool) core.objectService.createObject("object/tangible/survey_tool/shared_survey_tool_mineral.iff", planet);
 						mineralSurveyTool.setCustomName("Mineral Survey Device");
 						inventory.add(mineralSurveyTool);
@@ -1241,6 +1276,10 @@ public class DevService implements INetworkDispatch {
 						deed.setIntAttribute("examine_maintenance_rate", 15);
 						inventory.add(deed);
 						
+						deed = (TangibleObject) core.objectService.createObject("object/tangible/deed/guild_deed/shared_tatooine_guild_deed.iff", planet);
+						deed.setIntAttribute("examine_maintenance_rate", 15);
+						inventory.add(deed);
+						
 						return;
 					
 					case 121:
@@ -1274,14 +1313,20 @@ public class DevService implements INetworkDispatch {
 					case 168: 
 						core.simulationService.transferToPlanet(player, core.terrainService.getPlanetByName("dathomir"), new Point3D(-2450,18,1521), player.getOrientation(), null);
 						return;
+						
+					case 169: 
+						core.simulationService.transferToPlanet(player, core.terrainService.getPlanetByName("dathomir"), new Point3D(-4002, 4, -58), player.getOrientation(), null);
+						return;
 
 					case 123:
 						TangibleObject arakydDroids = (TangibleObject) core.objectService.createObject("object/tangible/mission/shared_mission_bounty_droid_probot.iff", planet);
-						//arakydDroids.setStackable(true);
-						//arakydDroids.setStackCount(10);
+						arakydDroids.setStackable(true);
+						arakydDroids.setUses(20);
 						inventory.add(arakydDroids);
 						
 						TangibleObject seekerDroids = (TangibleObject) core.objectService.createObject("object/tangible/mission/shared_mission_bounty_droid_seeker.iff", planet);
+						seekerDroids.setStackable(true);
+						seekerDroids.setUses(20);
 						inventory.add(seekerDroids);
 						return;
 
@@ -1296,6 +1341,13 @@ public class DevService implements INetworkDispatch {
 						inventory.add(swoopDeed);
 						inventory.add(av21deed);
 						return;
+						
+					case 131:
+						TangibleObject gurreckDeed = (TangibleObject) core.objectService.createObject("object/tangible/deed/pet_deed/shared_gurreck_deed.iff", planet);						
+						inventory.add(gurreckDeed);
+						TangibleObject merekDeed = (TangibleObject) core.objectService.createObject("object/tangible/deed/pet_deed/shared_merek_deed.iff", planet);						
+						inventory.add(merekDeed);
+						return;
 					
 					case 140:
 						TangibleObject guildRegistry = (TangibleObject) core.objectService.createObject("object/tangible/furniture/technical/shared_guild_registry_initial.iff", planet);
@@ -1305,11 +1357,45 @@ public class DevService implements INetworkDispatch {
 					case 153:
 						Point3D position = new Point3D(-6222,1,7380);
 						core.simulationService.transferToPlanet(player, core.terrainService.getPlanetByName("dantooine"), position, player.getOrientation(), null);
+						
+					case 177:
+						// "object/draft_schematic/item/shared_item_reverse_engineering_tool.iff"
+						TangibleObject REingTool = (TangibleObject) core.objectService.createObject("object/tangible/container/loot/shared_reverse_engineer_tool.iff", planet);						
+						REingTool.setCustomName("Reverse Engineering Tool");
+						inventory.add(REingTool);	
+						core.lootService.prepInv2(player);
+						return;
+
+					case 200:
+						TangibleObject frog = (TangibleObject) core.objectService.createObject("object/tangible/terminal/shared_terminal_character_builder.iff", planet);
+						
+						inventory.add(frog);
+						return;
 				}
 			}	
 		});
 		
 		core.suiService.openSUIWindow(window);	
+	}
+	
+	private void loadFrogBuilding() {
+		BuildingObject building = (BuildingObject) core.objectService.createObject("object/building/tatooine/shared_association_hall_civilian_tatooine_02.iff", 0, core.terrainService.getPlanetByName("tatooine"), 
+				new Point3D(-3308, 5, 2174), new Quaternion((float) 0.7323, 0, (float) 0.680961, 0));
+		
+		core.simulationService.add(building, building.getPosition().x, building.getPosition().z);
+		
+		this.frogBuildingId = building.getObjectID();
+		
+		building.setAttachment("structureOwner", 0);
+		
+		TangibleObject frog = (TangibleObject) core.objectService.createObject("object/tangible/terminal/shared_terminal_character_builder.iff", core.terrainService.getPlanetByID(building.getPlanetId()));
+		frog.setPosition(new Point3D((float)-1.10475, (float)0.51, (float)-4.3665));
+		frog.setOrientation(new Quaternion((float) 0.9965, 0, (float)-0.09, 0)); 
+		building.getCellByCellNumber(2).add(frog);
+	}
+	
+	public long getFrogBuildingId() {
+		return this.frogBuildingId;
 	}
 	
 	@Override
